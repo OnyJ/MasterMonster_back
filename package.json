@@ -1,4 +1,8 @@
 {
+  "scripts": {
+    "start": "node index.js",
+    "build": "npm install"
+  },
   "dependencies": {
     "express": "^5.1.0",
     "node": "^20.19.2",

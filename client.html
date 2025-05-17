@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <title>Test WebSocket Client</title>
+    <style>
+        #messages {
+            height: 400px;
+            border: 1px solid #ccc;
+            margin: 10px 0;
+            padding: 10px;
+            overflow-y: auto;
+            font-family: Arial, sans-serif;
+            line-height: 1.4;
+        }
+
+        .command {
+            color: #4a90e2;
+            /* Bleu plus doux */
+        }
+
+        .message {
+            color: #2ecc71;
+            /* Vert plus doux */
+        }
+
+        .server {
+            color: #e74c3c;
+            /* Rouge plus doux */
+            opacity: 0.8;
+            /* Légère transparence */
+        }
+
+        /* Styles additionnels pour améliorer la lisibilité */
+        #messages div {
+            margin: 4px 0;
+            padding: 2px 5px;
+        }
+
+        /* Effet de survol subtil */
+        #messages div:hover {
+            background-color: #f5f5f5;
+        }
+
+        /* Nouveau style pour l'input et son conteneur */
+        .input-container {
+            margin: 10px 0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #messageInput {
+            width: 35%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4a90e2;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #357abd;
+        }
+    </style>
+</head>
+
+<body>
+    <h2>Test WebSocket Client</h2>
+
+    <div>
+        <button onclick="connect()">Connect</button>
+        <button onclick="disconnect()">Disconnect</button>
+        <span id="status">Disconnected</span>
+    </div>
+
+    <div>
+        <p>Available commands:</p>
+        <ul>
+            <li>/help - Display this help message</li>
+            <li>/ping - Test connection</li>
+            <li>/status - Server status</li>
+            <li>/hello - Send hello to all connected clients</li>
+            <li>/clear - Clear chat messages</li>
+            <li>/time - Current server time</li>
+            <li>/clients - Number of connected clients</li>
+            <li>/uptime - Server uptime</li>
+            <li>/whisper &lt;user&gt; &lt;message&gt; - Send private message</li>
+        </ul>
+    </div>
+
+    <div id="messages"></div>
+
+    <!-- Modifier la div contenant l'input -->
+    <div class="input-container">
+        <input type="text" id="messageInput" placeholder="Type message or /command">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+
+    <script>
+        let ws;
+        const messageInput = document.getElementById('messageInput');
+        const messagesDiv = document.getElementById('messages');
+        const statusSpan = document.getElementById('status');
+
+        function connect() {
+            ws = new WebSocket('ws://localhost:3000');
+
+            ws.onopen = () => {
+                statusSpan.textContent = 'Connected';
+                addMessage('Connected to server', 'server');
+                // Démarrer le ping
+                startPing();
+            };
+
+            ws.onmessage = (event) => {
+                console.log('Message received:', event.data); // Debug log
+
+                // Ne pas afficher les pongs du heartbeat automatique
+                if (event.data === 'pong') {
+                    console.log('Heartbeat pong received');
+                    return;
+                }
+
+                // Afficher toutes les autres réponses du serveur
+                if (event.data.startsWith('Available commands') || // Pour /help
+                    event.data.includes('Server') ||              // Pour /status
+                    event.data.includes('Connected clients') ||    // Pour /clients
+                    event.data.includes('Latency')) {             // Pour /ping manuel
+                    addMessage(event.data, 'server');
+                }
+            };
+
+            ws.onclose = () => {
+                statusSpan.textContent = 'Disconnected';
+                addMessage('Disconnected from server', 'server');
+                stopPing();
+
+                // Tentative de reconnexion après 5 secondes
+                setTimeout(() => {
+                    if (!ws || ws.readyState === WebSocket.CLOSED) {
+                        console.log('Attempting to reconnect...');
+                        connect();
+                    }
+                }, 5000);
+            };
+
+            ws.onerror = (error) => {
+                addMessage(`Error: ${error.message}`, 'server');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                // Arrêter le ping avant la déconnexion
+                stopPing();
+                ws.close();
+            }
+        }
+
+        function sendMessage() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addMessage('Not connected to server', 'server');
+                return;
+            }
+
+            const message = messageInput.value;
+            if (message) {
+                ws.send(message);
+                // On n'affiche pas les commandes qui commencent par '/'
+                if (!message.startsWith('/')) {
+                    addMessage(`You: ${message}`, 'message');
+                }
+                messageInput.value = '';
+            }
+        }
+
+        function addMessage(message, type) {
+            const div = document.createElement('div');
+            div.textContent = message;
+            div.className = type;
+            messagesDiv.appendChild(div);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // Permettre l'envoi avec la touche Enter
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        // Ajouter ces nouvelles fonctions
+        let pingInterval;
+
+        function startPing() {
+            // Envoyer un ping toutes les 15 secondes au lieu de 30
+            pingInterval = setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        ws.send('/ping');
+                        console.log('Ping sent to server');
+                    } catch (error) {
+                        console.error('Error sending ping:', error);
+                        stopPing();
+                        ws.close();
+                    }
+                } else {
+                    console.log('Connection lost, stopping ping');
+                    stopPing();
+                }
+            }, 15000); // 15 secondes
+        }
+
+        function stopPing() {
+            if (pingInterval) {
+                clearInterval(pingInterval);
+                pingInterval = null;
+            }
+        }
+    </script>
+</body>
+
+</html>

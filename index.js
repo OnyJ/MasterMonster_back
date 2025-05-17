@@ -5,69 +5,191 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Activation CORS
+// Configuration Express
 app.use(cors());
 app.use(express.json());
 
-// Configuration Express de base
 app.get('/', (req, res) => {
   res.send('Master Monster Backend is running');
 });
 
-// Status check pour Render
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
 });
 
-// Démarrage du serveur HTTP
+// Serveur HTTP
 const server = app.listen(port, '0.0.0.0', () => {
   console.log(`Server is running on port ${port}`);
 });
 
-// Configuration WebSocket avec gestion des erreurs
+// Serveur WebSocket
 const wss = new WebSocket.Server({ 
   server,
   clientTracking: true,
-  handleProtocols: true
+  // Ajouter ces options pour plus de stabilité
+  pingTimeout: 60000, // 60 secondes
+  pingInterval: 25000, // 25 secondes
 });
 
-wss.on('connection', (ws, req) => {
+// Gestion des commandes
+function handleCommand(ws, command) {
+  console.log('Command received:', command);
+
+  switch (command) {
+      case 'help':
+          ws.send(
+            "Available commands:\n\n" +
+            "/help - Display this help message\n" +
+            "/ping - Test connection\n" +
+            "/status - Server status\n" +
+            "/hello - Send hello to all connected clients\n" +
+            "/clients - Number of connected clients\n" +
+            "/time - Current server time\n" +
+            "/uptime - Server uptime\n" +
+            "/clear - Clear chat messages\n" +
+            "/whisper <user> <message> - Send private message"
+          );
+          break;
+      case 'ping': {
+        const startTime = Date.now();
+        ws.ping(() => {
+            const latency = Date.now() - startTime;
+            ws.send(`Pong! Latency: ${latency}ms`);
+        });
+        break;
+      }
+      case 'status':
+        ws.send('Server is running');
+        break;
+      case 'clients': {
+        const clientCount = wss.clients.size;
+        ws.send(`Connected clients: ${clientCount}`);
+        break;
+      }
+      case 'time': {
+        const time = new Date().toLocaleTimeString();
+        ws.send(`Server time: ${time}`);
+        break;
+      }
+      case 'uptime': {
+        const uptime = process.uptime();
+        const hours = Math.floor(uptime / 3600);
+        const minutes = Math.floor((uptime % 3600) / 60);
+        const seconds = Math.floor(uptime % 60);
+        ws.send(`Server uptime: ${hours}h ${minutes}m ${seconds}s`);
+        break;
+      }
+      case 'clear':
+        broadcastMessage(ws, '/clear');
+        break;
+      case 'hello':
+        // Diffuser le message à tous les clients
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send('Someone says hello to everyone!');
+          }
+        });
+        break;
+      default:
+        // Gestion des commandes avec paramètres
+        if (command.startsWith('whisper ')) {
+          const parts = command.split(' ');
+          if (parts.length >= 3) {
+            const targetUser = parts[1];
+            const message = parts.slice(2).join(' ');
+            // Implémentation à faire pour la gestion des utilisateurs
+            ws.send(`Private message to ${targetUser}: ${message}`);
+          } else {
+            ws.send('Usage: /whisper <user> <message>');
+          }
+        } else {
+          ws.send(`Unknown command: ${command}`);
+        }
+  }
+}
+
+// Gestion des messages
+function broadcastMessage(sender, message) {
+  wss.clients.forEach((client) => {
+    if (client !== sender && client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  });
+}
+
+// Connexion WebSocket
+wss.on('connection', (ws) => {
   console.log('New client connected');
-  
   ws.isAlive = true;
-  
+
+  // Gestionnaire de pong
   ws.on('pong', () => {
     ws.isAlive = true;
+    console.log('Client pong received');
   });
 
+  // Interval de ping pour chaque client
+  const pingInterval = setInterval(() => {
+    if (ws.isAlive === false) {
+      console.log('Client connection lost - terminating');
+      clearInterval(pingInterval);
+      return ws.terminate();
+    }
+
+    ws.isAlive = false;
+    try {
+      ws.ping();
+      console.log('Ping sent to client');
+    } catch (error) {
+      console.error('Error sending ping:', error);
+      clearInterval(pingInterval);
+      ws.terminate();
+    }
+  }, 30000);
+
+  // Nettoyer l'interval à la fermeture
+  ws.on('close', () => {
+    console.log('Client disconnected - cleaning up');
+    clearInterval(pingInterval);
+  });
+
+  // Gestion des messages
   ws.on('message', (data) => {
     try {
-      console.log('Received:', data.toString());
-      ws.send(`Server received: ${data}`);
+      const message = data.toString();
+      console.log('Message reçu:', message);
+
+      if (message.startsWith('/')) {
+        // Enlever le '/' et les espaces au début et à la fin
+        const command = message.slice(1).trim().toLowerCase();
+        console.log('Commande détectée:', command);
+        handleCommand(ws, command);
+      } else {
+        console.log('Message normal:', message);
+        broadcastMessage(ws, message);
+      }
     } catch (error) {
-      console.error('Error processing message:', error);
+      console.error('Error:', error);
+      ws.send('Error: Invalid message format');
     }
   });
 
+  // Gestion de la déconnexion
   ws.on('close', () => {
     console.log('Client disconnected');
     ws.isAlive = false;
   });
 
+  // Gestion des erreurs
   ws.on('error', (error) => {
     console.error('WebSocket error:', error);
   });
+
+  // Ping initial
+  ws.send('Welcome to the server!');
 });
 
-// Ping/Pong pour maintenir les connexions actives
-const interval = setInterval(() => {
-  wss.clients.forEach((ws) => {
-    if (ws.isAlive === false) return ws.terminate();
-    ws.isAlive = false;
-    ws.ping();
-  });
-}, 30000);
-
+// Nettoyage à la fermeture
 wss.on('close', () => {
   clearInterval(interval);
 });

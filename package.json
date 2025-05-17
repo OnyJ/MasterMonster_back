@@ -1,11 +1,18 @@
 {
+  "name": "mastermonster-backend",
+  "version": "1.0.0",
+  "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "build": "npm install"
   },
   "dependencies": {
+    "cors": "^2.8.5",
     "express": "^5.1.0",
     "node": "^20.19.2",
     "ws": "^8.18.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

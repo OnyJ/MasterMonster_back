@@ -114,20 +114,23 @@
             };
 
             ws.onmessage = (event) => {
-                console.log('Message received:', event.data); // Debug log
-
-                // Ne pas afficher les pongs du heartbeat automatique
-                if (event.data === 'pong') {
-                    console.log('Heartbeat pong received');
-                    return;
-                }
-
-                // Afficher toutes les autres réponses du serveur
-                if (event.data.startsWith('Available commands') || // Pour /help
-                    event.data.includes('Server') ||              // Pour /status
-                    event.data.includes('Connected clients') ||    // Pour /clients
-                    event.data.includes('Latency')) {             // Pour /ping manuel
-                    addMessage(event.data, 'server');
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'help') {
+                        // Traitement spécial pour la commande help
+                        const formattedHelp = data.content.map(line => 
+                            line === '' ? '' : line
+                        ).join('');
+                        addMessage(formattedHelp, 'server');
+                    } else {
+                        // Traitement normal pour les autres messages
+                        addMessage(event.data, 'server');
+                    }
+                } catch (e) {
+                    // Log the error and handle non-JSON messages
+                    console.error('Error parsing JSON:', e);
+                    addMessage(`Raw message received: ${event.data}`, 'server');
                 }
             };
 

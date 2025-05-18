@@ -37,18 +37,22 @@ function handleCommand(ws, command) {
 
   switch (command) {
       case 'help':
-          ws.send(
-            "Available commands:\n\n" +
-            "/help - Display this help message\n" +
-            "/ping - Test connection\n" +
-            "/status - Server status\n" +
-            "/hello - Send hello to all connected clients\n" +
-            "/clients - Number of connected clients\n" +
-            "/time - Current server time\n" +
-            "/uptime - Server uptime\n" +
-            "/clear - Clear chat messages\n" +
-            "/whisper <user> <message> - Send private message"
-          );
+          ws.send(JSON.stringify({
+              type: 'help',
+              content: [
+                  'Available commands:',
+                  '',
+                  '/help : Display this help message - ',
+                  '/ping : Test connection - ',
+                  '/status : Server status - ',
+                  '/hello : Send hello to all connected clients - ',
+                  '/clients : Number of connected clients - ',
+                  '/time : Current server time - ',
+                  '/uptime : Server uptime - ',
+                  '/clear : Clear chat messages - ',
+                  '/whisper <user> <message> : Send private message'
+              ]
+          }));
           break;
       case 'ping': {
         const startTime = Date.now();

@@ -2,8 +2,9 @@
   "name": "mastermonster-backend",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
+    "start": "node server.js",
     "build": "npm install"
   },
   "dependencies": {
@@ -11,6 +12,7 @@
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "node": "^20.19.2",
+    "socket.io": "^4.8.1",
     "ws": "^8.18.2"
   },
   "engines": {
